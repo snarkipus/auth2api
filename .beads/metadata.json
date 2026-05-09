@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "auth2api",
+  "project_id": "939a16b6-3f50-4d93-82f4-7e41d786fe40"
+}

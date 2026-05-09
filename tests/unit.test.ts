@@ -5,7 +5,12 @@ import path from "node:path";
 import fs from "node:fs";
 import { EventEmitter } from "node:events";
 
-import { extractApiKey, hashApiKey, timeout } from "../src/utils/common";
+import {
+  extractApiKey,
+  hashApiKey,
+  isValidApiKey,
+  timeout,
+} from "../src/utils/common";
 import { combineAbortSignals } from "../src/utils/abort";
 import { classifyFailure, proxyWithRetry } from "../src/utils/http";
 import { handleStreamingResponse } from "../src/upstream/streaming";
@@ -69,6 +74,14 @@ test("hashApiKey returns consistent sha256 hex", () => {
 
 test("hashApiKey returns different hashes for different keys", () => {
   assert.notEqual(hashApiKey("key-a"), hashApiKey("key-b"));
+});
+
+test("isValidApiKey accepts configured keys and rejects others", () => {
+  const keys = new Set(["sk-test-a", "sk-test-b"]);
+  assert.equal(isValidApiKey("sk-test-a", keys), true);
+  assert.equal(isValidApiKey("sk-test-b", keys), true);
+  assert.equal(isValidApiKey("sk-test-c", keys), false);
+  assert.equal(isValidApiKey("", keys), false);
 });
 
 test("timeout resolves after delay", async () => {
@@ -375,6 +388,25 @@ test("loadConfig normalizes debug mode", () => {
   try {
     const config = loadConfig(configPath);
     assert.equal(config.debug, "errors"); // true → "errors"
+  } finally {
+    fs.unlinkSync(configPath);
+  }
+});
+
+test("loadConfig rejects example placeholder API key", () => {
+  const configPath = path.join(
+    os.tmpdir(),
+    `auth2api-placeholder-test-${Date.now()}.yaml`,
+  );
+  fs.writeFileSync(
+    configPath,
+    'api-keys:\n  - "your-api-key-here"\nauth-dir: "~/.auth2api"\n',
+  );
+  try {
+    assert.throws(
+      () => loadConfig(configPath),
+      /Refusing to start with placeholder API key/,
+    );
   } finally {
     fs.unlinkSync(configPath);
   }

@@ -33,7 +33,7 @@ export interface CloakingConfig {
     "agent-base-url"?: string;
     "api-base-url"?: string;
     "config-version"?: string;
-    "timezone"?: string;
+    timezone?: string;
     "ghost-mode"?: string;
   };
 }
@@ -79,6 +79,8 @@ const DEFAULT_RAW: RawConfig = {
   },
   debug: "off",
 };
+
+const PLACEHOLDER_API_KEYS = new Set(["your-api-key-here"]);
 
 function normalizeDebugMode(value: unknown): DebugMode {
   if (value === true) return "errors";
@@ -135,6 +137,15 @@ export function loadConfig(configPath?: string): Config {
       mode: 0o600,
     });
     console.log(`\nGenerated API key (saved to ${filePath}):\n\n  ${key}\n`);
+  }
+
+  for (const key of raw["api-keys"]) {
+    if (PLACEHOLDER_API_KEYS.has(key)) {
+      throw new Error(
+        `Refusing to start with placeholder API key "${key}" in ${filePath}. ` +
+          "Generate a strong random key or remove api-keys to let auth2api create one.",
+      );
+    }
   }
 
   return { ...raw, "api-keys": new Set(raw["api-keys"]) };

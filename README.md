@@ -135,6 +135,14 @@ cloaking:
     api-base-url: "https://api2.cursor.sh"
 ```
 
+## Security notes
+
+- Keep the default `host: ""` unless you intentionally need remote access; it binds to `127.0.0.1`. If you set `host: "0.0.0.0"` or publish Docker port `8317`, put the service behind a trusted firewall/VPN/reverse proxy.
+- Do not use the example `your-api-key-here` value. auth2api refuses to start with that placeholder; remove `api-keys` to auto-generate a strong key, or set your own high-entropy random key.
+- Protect `config.yaml` and `auth-dir`: they contain API keys and OAuth refresh tokens. The app writes generated config as `0600` and token files as `0600`, but mounted Docker volumes inherit host permissions.
+- Leave `debug: "off"` for normal use. `debug: "verbose"` can log request bodies, including prompts and tool inputs.
+- `/health` is unauthenticated by design. `/v1/*` and `/admin/*` require an API key and are rate-limited per source IP.
+
 ## Usage
 
 Use any OpenAI-compatible client pointed at `http://127.0.0.1:8317`:

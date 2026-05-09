@@ -1,7 +1,7 @@
 import express from "express";
 import { Config, isDebugLevel } from "./config";
 import { ProviderRegistry } from "./providers/registry";
-import { extractApiKey } from "./utils/common";
+import { extractApiKey, isValidApiKey } from "./utils/common";
 import {
   createChatCompletionsHandler,
   createResponsesHandler,
@@ -79,8 +79,9 @@ export function createServer(
     next();
   });
 
-  // Rate limiting middleware
-  app.use("/v1", (req, res, next) => {
+  // Rate limiting middleware — cover both data-plane and admin endpoints so
+  // exposed deployments get basic brute-force protection before auth runs.
+  app.use(["/v1", "/admin"], (req, res, next) => {
     const ip = req.ip || req.socket.remoteAddress || "unknown";
     if (!rateLimit(ip)) {
       res.status(429).json({ error: { message: "Too many requests" } });
@@ -97,7 +98,7 @@ export function createServer(
       res.status(401).json({ error: { message: "Missing API key" } });
       return;
     }
-    const valid = config["api-keys"].has(key);
+    const valid = isValidApiKey(key, config["api-keys"]);
     if (!valid) {
       res.status(403).json({ error: { message: "Invalid API key" } });
       return;

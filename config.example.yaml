@@ -5,6 +5,8 @@ port: 8317
 auth-dir: "~/.auth2api"
 
 # API keys for client authentication (clients use these to access this proxy)
+# Replace the placeholder with a high-entropy random key. auth2api refuses to
+# start with the example value below; omit api-keys entirely to auto-generate.
 api-keys:
   - "your-api-key-here"
 

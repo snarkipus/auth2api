@@ -31,6 +31,22 @@ export function hashApiKey(apiKey: string): string {
   return crypto.createHash("sha256").update(apiKey).digest("hex");
 }
 
+export function isValidApiKey(
+  candidate: string,
+  configured: Set<string>,
+): boolean {
+  if (!candidate || configured.size === 0) return false;
+
+  const candidateHash = Buffer.from(hashApiKey(candidate), "hex");
+  for (const key of configured) {
+    const configuredHash = Buffer.from(hashApiKey(key), "hex");
+    if (crypto.timingSafeEqual(candidateHash, configuredHash)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // ── Device ID ──
 
 /**

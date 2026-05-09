@@ -268,6 +268,20 @@ Or with docker-compose:
 docker-compose up -d
 ```
 
+### Local Docker smoke test
+
+Run a local image build plus container smoke test without real OAuth tokens:
+
+```bash
+npm run test:docker
+```
+
+The script creates a temporary `config.yaml` with `host: "0.0.0.0"`, a fake Anthropic token under a temporary `/data` mount, and binds the container to `127.0.0.1:8317`. It verifies `/health`, unauthenticated `/admin/accounts` returns `401`, and authenticated `/admin/accounts` plus `/v1/models` respond. Override the image or port if needed:
+
+```bash
+IMAGE_NAME=auth2api:local HOST_PORT=18317 npm run test:docker
+```
+
 ## Use with Claude Code
 
 Set `ANTHROPIC_BASE_URL` to point Claude Code at auth2api:

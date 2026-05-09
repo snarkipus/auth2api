@@ -10,6 +10,7 @@
     "login": "tsx src/index.ts --login",
     "test": "tsx --test tests/*.test.ts",
     "test:smoke": "tsx --test tests/smoke.test.ts",
+    "test:docker": "./scripts/docker-smoke.sh",
     "prettier": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\""
   },
   "dependencies": {

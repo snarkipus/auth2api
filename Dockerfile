@@ -1,17 +1,27 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine AS deps
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM deps AS builder
 COPY tsconfig.json ./
 COPY src/ src/
-RUN npx tsc
+RUN npm run build
+
+FROM node:20-alpine AS prod-deps
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 FROM node:20-alpine
 WORKDIR /app
+ENV NODE_ENV=production
 COPY --from=builder /app/dist dist/
-COPY --from=builder /app/node_modules node_modules/
+COPY --from=prod-deps /app/node_modules node_modules/
 COPY package.json ./
+RUN mkdir -p /data /config && chown -R node:node /app /data /config
 EXPOSE 8317
 VOLUME ["/data", "/config"]
-ENV NODE_ENV=production
+USER node
 CMD ["node", "dist/index.js", "--config=/config/config.yaml"]

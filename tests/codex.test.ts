@@ -650,16 +650,39 @@ test("waitForCallback serves success HTML inline (no 302 to closed server)", asy
 import { normalizeCodexResponsesBody } from "../src/upstream/codex-api";
 
 test("normalizeCodexResponsesBody fills missing required fields", () => {
+  const input = [
+    { role: "user", content: [{ type: "input_text", text: "hi" }] },
+  ];
   const out = normalizeCodexResponsesBody({
     model: "gpt-5.3-codex",
-    input: [{ role: "user", content: [{ type: "input_text", text: "hi" }] }],
+    input,
   });
   assert.equal(out.stream, true);
   assert.equal(out.store, false);
   assert.equal(out.instructions, "");
   // Untouched fields preserved
   assert.equal(out.model, "gpt-5.3-codex");
-  assert.ok(Array.isArray(out.input));
+  assert.equal(out.input, input);
+});
+
+test("normalizeCodexResponsesBody converts string input to user input_text", () => {
+  const out = normalizeCodexResponsesBody({
+    model: "gpt-5.5",
+    input: "Reply with exactly: codex responses ok",
+    stream: false,
+  });
+
+  assert.deepEqual(out.input, [
+    {
+      role: "user",
+      content: [
+        { type: "input_text", text: "Reply with exactly: codex responses ok" },
+      ],
+    },
+  ]);
+  assert.equal(out.stream, false);
+  assert.equal(out.store, false);
+  assert.equal(out.instructions, "");
 });
 
 test("normalizeCodexResponsesBody preserves explicit values", () => {

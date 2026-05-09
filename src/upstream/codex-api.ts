@@ -82,6 +82,14 @@ function buildHeaders(
 export function normalizeCodexResponsesBody(body: any): any {
   if (!body || typeof body !== "object") return body;
   const next: any = { ...body };
+  if (typeof next.input === "string") {
+    next.input = [
+      {
+        role: "user",
+        content: [{ type: "input_text", text: next.input }],
+      },
+    ];
+  }
   if (next.stream === undefined) next.stream = true;
   if (next.store === undefined) next.store = false;
   if (next.instructions === undefined) next.instructions = "";

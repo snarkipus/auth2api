@@ -251,15 +251,52 @@ The decoder routes Cursor's chain-of-thought (`reasoning`) bytes to `response.re
 ## Docker
 
 ```bash
-# Build
-docker build -t auth2api .
+# Build the runtime image
+docker build -t auth2api:local .
+```
 
-# Run (mount your config and token directory)
+For real Codex use, `config.yaml` must be mounted into the container and token files must live in the same Docker data volume the server will use. In Docker config, set `host: "0.0.0.0"` and `auth-dir: "/data"`; bind the host port to `127.0.0.1` unless you intentionally want network exposure.
+
+```bash
+# 1. Store Codex OAuth tokens in the Docker data volume
+npm run docker:login:codex
+
+# 2. Start the service with config.yaml mounted correctly
+npm run docker:run
+
+# 3. Verify health, authenticated admin, and model listing
+API_KEY=<your-api-key> npm run docker:verify
+
+# Optional live Codex /v1/responses check; consumes account quota
+API_KEY=<your-api-key> VERIFY_CODEX=1 npm run docker:verify
+```
+
+The scripts default to `IMAGE_NAME=auth2api:local`, `CONFIG_PATH=./config.yaml`, `DATA_VOLUME=auth2api-data`, `CONTAINER_NAME=auth2api`, and `HOST_PORT=8317`. Override them as environment variables:
+
+```bash
+CONFIG_PATH=/root/docker-lab/auth2api/config.yaml \
+HOST_PORT=18317 \
+REMOVE_EXISTING=1 \
+npm run docker:run
+```
+
+Manual equivalent:
+
+```bash
+# Login into the same volume used by the server
+docker run --rm -it \
+  -v auth2api-data:/data \
+  -v "$PWD/config.yaml:/config/config.yaml:ro" \
+  auth2api:local \
+  node dist/index.js --config=/config/config.yaml --login --provider=codex --manual
+
+# Run the server
 docker run -d \
-  -p 8317:8317 \
-  -v ~/.auth2api:/data \
-  -v ./config.yaml:/config/config.yaml \
-  auth2api
+  --name auth2api \
+  -p 127.0.0.1:8317:8317 \
+  -v auth2api-data:/data \
+  -v "$PWD/config.yaml:/config/config.yaml:ro" \
+  auth2api:local
 ```
 
 Or with docker-compose:

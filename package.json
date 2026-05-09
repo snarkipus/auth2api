@@ -11,6 +11,9 @@
     "test": "tsx --test tests/*.test.ts",
     "test:smoke": "tsx --test tests/smoke.test.ts",
     "test:docker": "./scripts/docker-smoke.sh",
+    "docker:login:codex": "./scripts/docker-login-codex.sh",
+    "docker:run": "./scripts/docker-run.sh",
+    "docker:verify": "./scripts/docker-verify.sh",
     "prettier": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\""
   },
   "dependencies": {

@@ -3,6 +3,7 @@ import { Config, isDebugLevel } from "../config";
 import { extractUsage } from "../accounts/manager";
 import { ProviderRegistry } from "../providers/registry";
 import { proxyWithRetry } from "../utils/http";
+import { tagStatsModel, tagStatsUsage } from "../stats/recorder";
 import {
   resolveModel,
   openaiToAnthropic,
@@ -69,7 +70,9 @@ async function proxyCodexChatCompletions(args: {
   stream: boolean;
 }): Promise<void> {
   const { req, resp, config, provider, body, model, stream } = args;
-  const responsesBody = normalizeCodexResponsesBody(chatToResponsesRequest(body));
+  const responsesBody = normalizeCodexResponsesBody(
+    chatToResponsesRequest(body),
+  );
   // codex's ChatGPT-account backend rejects a couple of public-Responses
   // fields. Strip them here — they are not load-bearing and the backend
   // applies its own caps from the user's ChatGPT plan.
@@ -98,8 +101,7 @@ async function proxyCodexChatCompletions(args: {
       if (stream) {
         const state = makeResponsesToChatState(model);
         const result = await handleStreamingResponse(upstream, resp, {
-          onEvent: (event, data) =>
-            responsesSSEToChat(event, data, state),
+          onEvent: (event, data) => responsesSSEToChat(event, data, state),
         });
         if (result.completed) {
           provider.manager.recordSuccess(account.token.email, result.usage);
@@ -164,14 +166,16 @@ async function proxyCodexChatCompletions(args: {
         usage,
       };
       const completion = responsesToChatCompletion(fauxResponses, model);
-      provider.manager.recordSuccess(account.token.email, {
+      const codexChatUsage = {
         inputTokens: usage?.input_tokens || 0,
         outputTokens: usage?.output_tokens || 0,
         cacheCreationInputTokens: 0,
         cacheReadInputTokens: usage?.input_tokens_details?.cached_tokens || 0,
         reasoningOutputTokens:
           usage?.output_tokens_details?.reasoning_tokens || 0,
-      });
+      };
+      provider.manager.recordSuccess(account.token.email, codexChatUsage);
+      tagStatsUsage(resp, codexChatUsage);
       resp.json(completion);
     },
     errorAdapter: openaiErrorBody,
@@ -312,9 +316,7 @@ async function proxyCodexResponses(args: {
                     ? [
                         {
                           type: "message",
-                          content: [
-                            { type: "output_text", text: textOut },
-                          ],
+                          content: [{ type: "output_text", text: textOut }],
                         },
                       ]
                     : []),
@@ -329,14 +331,16 @@ async function proxyCodexResponses(args: {
         };
       }
 
-      provider.manager.recordSuccess(account.token.email, {
+      const codexRespUsage = {
         inputTokens: usage?.input_tokens || 0,
         outputTokens: usage?.output_tokens || 0,
         cacheCreationInputTokens: 0,
         cacheReadInputTokens: usage?.input_tokens_details?.cached_tokens || 0,
         reasoningOutputTokens:
           usage?.output_tokens_details?.reasoning_tokens || 0,
-      });
+      };
+      provider.manager.recordSuccess(account.token.email, codexRespUsage);
+      tagStatsUsage(resp, codexRespUsage);
       resp.json(responseBody);
     },
     errorAdapter: openaiErrorBody,
@@ -414,7 +418,8 @@ async function proxyCursorChatCompletions(args: {
         }
         const delta = data.choices?.[0]?.delta;
         if (delta) {
-          if (typeof delta.content === "string") aggregatedText += delta.content;
+          if (typeof delta.content === "string")
+            aggregatedText += delta.content;
           if (typeof delta.reasoning_content === "string")
             aggregatedReasoning += delta.reasoning_content;
         }
@@ -447,22 +452,22 @@ async function proxyCursorChatCompletions(args: {
         object: "chat.completion",
         created: Math.floor(Date.now() / 1000),
         model,
-        choices: [
-          { index: 0, message, finish_reason: "stop", logprobs: null },
-        ],
+        choices: [{ index: 0, message, finish_reason: "stop", logprobs: null }],
         usage: {
           prompt_tokens: 0,
           completion_tokens: 0,
           total_tokens: 0,
         },
       };
-      provider.manager.recordSuccess(account.token.email, {
+      const cursorChatUsage = {
         inputTokens: 0,
         outputTokens: 0,
         cacheCreationInputTokens: 0,
         cacheReadInputTokens: 0,
         reasoningOutputTokens: 0,
-      });
+      };
+      provider.manager.recordSuccess(account.token.email, cursorChatUsage);
+      tagStatsUsage(resp, cursorChatUsage);
       resp.json(completion);
     },
     errorAdapter: openaiErrorBody,
@@ -493,6 +498,7 @@ export function createChatCompletionsHandler(
       const stream = !!body.stream;
       const model = resolveModel(body.model || "claude-sonnet-4-6");
       const provider = registry.forModel(model);
+      tagStatsModel(resp, model, provider.id);
 
       // Cursor's wire protocol is closer to the OpenAI Responses API than to
       // Anthropic Messages, so for Cursor we skip the OpenAI->Anthropic
@@ -581,10 +587,9 @@ export function createChatCompletionsHandler(
             }
           } else {
             const anthropicResp = await upstream.json();
-            provider.manager.recordSuccess(
-              account.token.email,
-              extractUsage(anthropicResp),
-            );
+            const usage = extractUsage(anthropicResp);
+            provider.manager.recordSuccess(account.token.email, usage);
+            tagStatsUsage(resp, usage);
             resp.json(anthropicToOpenai(anthropicResp, model));
           }
         },
@@ -612,6 +617,7 @@ export function createResponsesHandler(
 
       const model = resolveModel(body.model || "claude-sonnet-4-6");
       const provider = registry.forModel(model);
+      tagStatsModel(resp, model, provider.id);
 
       // The client-requested streaming intent is captured BEFORE we
       // normalize the upstream body — codex/cursor each force
@@ -715,10 +721,9 @@ export function createResponsesHandler(
             }
           } else {
             const anthropicResp = await upstream.json();
-            provider.manager.recordSuccess(
-              account.token.email,
-              extractUsage(anthropicResp),
-            );
+            const usage = extractUsage(anthropicResp);
+            provider.manager.recordSuccess(account.token.email, usage);
+            tagStatsUsage(resp, usage);
             resp.json(anthropicToResponses(anthropicResp, model));
           }
         },

@@ -1,7 +1,7 @@
 import express from "express";
 import { Config, isDebugLevel } from "./config";
 import { ProviderRegistry } from "./providers/registry";
-import { extractApiKey, isValidApiKey } from "./utils/common";
+import { extractApiKey, hashApiKey, isValidApiKey } from "./utils/common";
 import {
   createChatCompletionsHandler,
   createResponsesHandler,
@@ -10,6 +10,7 @@ import {
   createMessagesHandler,
   createCountTokensHandler,
 } from "./handlers/anthropic";
+import { StatsRecorder } from "./stats/recorder";
 
 // Simple in-memory rate limiter per IP
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -42,6 +43,7 @@ cleanupTimer.unref();
 export function createServer(
   config: Config,
   registry: ProviderRegistry,
+  statsRecorder?: StatsRecorder,
 ): express.Application {
   const app = express();
 
@@ -103,6 +105,85 @@ export function createServer(
       res.status(403).json({ error: { message: "Invalid API key" } });
       return;
     }
+    // Seed res.locals.stats so the stats-finish middleware can record this
+    // request even if the downstream handler aborts before filling in the
+    // upstream account / model / usage fields.
+    if (statsRecorder) {
+      const ip = req.ip || req.socket.remoteAddress || "unknown";
+      const ua = (req.headers["user-agent"] as string) || "";
+      res.locals.stats = {
+        apiKeyHash: hashApiKey(key),
+        ip,
+        ua,
+        endpoint: `${req.method} ${req.baseUrl}${req.path}`,
+        startedAt: Date.now(),
+        model: null,
+        provider: null,
+        accountEmail: null,
+        usage: null,
+        failureKind: null,
+      };
+    }
+    next();
+  };
+
+  // Record one stats event per request that made it past auth. `finish`
+  // covers normal responses; `close` covers client disconnects before the
+  // response completed. A guard prevents the normal finish->close sequence
+  // from double-counting.
+  const statsFinishMiddleware: express.RequestHandler = (req, res, next) => {
+    if (!statsRecorder) return next();
+    let recorded = false;
+    const recordStats = (override?: {
+      status: "success" | "failure";
+      statusCode: number;
+      failureKind: string | null;
+    }) => {
+      if (recorded) return;
+      recorded = true;
+      const ctx = res.locals.stats as
+        | {
+            apiKeyHash: string;
+            ip: string;
+            ua: string;
+            endpoint: string;
+            startedAt: number;
+            model: string | null;
+            provider: string | null;
+            accountEmail: string | null;
+            usage: any;
+            failureKind: string | null;
+          }
+        | undefined;
+      if (!ctx) return;
+      const status: "success" | "failure" =
+        override?.status ??
+        (res.statusCode >= 200 && res.statusCode < 300 ? "success" : "failure");
+      statsRecorder.record({
+        apiKeyHash: ctx.apiKeyHash,
+        ip: ctx.ip,
+        ua: ctx.ua,
+        endpoint: ctx.endpoint,
+        model: ctx.model,
+        provider: ctx.provider as any,
+        accountEmail: ctx.accountEmail,
+        status,
+        failureKind: override?.failureKind ?? ctx.failureKind,
+        statusCode: override?.statusCode ?? res.statusCode,
+        latencyMs: Date.now() - ctx.startedAt,
+        usage: ctx.usage,
+      });
+    };
+    res.on("finish", () => recordStats());
+    res.on("close", () => {
+      if (!res.writableEnded) {
+        recordStats({
+          status: "failure",
+          statusCode: 499,
+          failureKind: "client_disconnect",
+        });
+      }
+    });
     next();
   };
 
@@ -112,6 +193,23 @@ export function createServer(
   });
 
   app.use("/admin", requireApiKey);
+  app.use("/admin", statsFinishMiddleware);
+
+  // GET /admin/stats — three-axis aggregated call statistics.
+  //   byClient — keyed by sha256(api-key); show short hex prefix to operator
+  //   byAccount — keyed by `${provider}:${email}` (upstream OAuth account)
+  //   byApi — keyed by `${endpoint}|${model}|${provider}`
+  app.get("/admin/stats", (_req, res) => {
+    if (!statsRecorder) {
+      res.json({ enabled: false });
+      return;
+    }
+    res.json({
+      ...statsRecorder.getSnapshot(),
+      generated_at: new Date().toISOString(),
+    });
+  });
+
   app.get("/admin/accounts", (_req, res) => {
     const providers: Record<
       string,
@@ -150,6 +248,7 @@ export function createServer(
   });
 
   app.use("/v1", requireApiKey);
+  app.use("/v1", statsFinishMiddleware);
   app.get("/v1/models", async (_req, res) => {
     const created = Math.floor(Date.now() / 1000);
     const providers = registry.withAccounts();

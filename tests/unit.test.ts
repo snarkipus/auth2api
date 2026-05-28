@@ -120,6 +120,7 @@ function makeMockResponse(): any {
   const resp = new EventEmitter() as any;
   resp.headers = {};
   resp.chunks = [];
+  resp.locals = {};
   resp.headersSent = false;
   resp.destroyed = false;
   resp.setHeader = (key: string, value: string) => {
@@ -345,6 +346,30 @@ test("proxyWithRetry does not write terminal error after client disconnects", as
 
   assert.equal(writes, 0, "no headers/body should be written after disconnect");
   assert.equal(resp.body, undefined);
+});
+
+test("proxyWithRetry tags stats failure kind for upstream server errors", async () => {
+  const resp = makeMockResponse();
+  resp.locals.stats = {};
+  const account: any = { token: { email: "x@y.z" } };
+  const manager: any = {
+    provider: "anthropic",
+    getNextAccount: () => ({ account }),
+    recordAttempt: () => {},
+    recordFailure: () => {},
+    refreshAccount: async () => false,
+  };
+
+  await proxyWithRetry("TestProxy", resp, { debug: "off" } as any, {
+    manager,
+    maxRetries: 1,
+    upstream: async () => new Response("server boom", { status: 500 }),
+    success: async () => {},
+  });
+
+  assert.equal(resp.locals.stats.accountEmail, "x@y.z");
+  assert.equal(resp.locals.stats.provider, "anthropic");
+  assert.equal(resp.locals.stats.failureKind, "server");
 });
 
 // ══════════════════════════════════════════════════
@@ -992,4 +1017,289 @@ test("anthropicSSEToResponses returns empty for unknown events", () => {
     anthropicSSEToResponses("ping", {}, state, "sonnet", usage),
     [],
   );
+});
+
+// ══════════════════════════════════════════════════
+// stats/recorder.ts
+// ══════════════════════════════════════════════════
+
+import { StatsRecorder, StatsEvent } from "../src/stats/recorder";
+import { replayStatsEvents, statsFilePath } from "../src/stats/storage";
+import { createServer } from "../src/server";
+
+function makeStatsEvent(over: Partial<StatsEvent> = {}): StatsEvent {
+  return {
+    v: 1,
+    ts: "2026-05-09T12:00:00.000Z",
+    apiKeyHash: "a".repeat(64),
+    ip: "127.0.0.1",
+    ua: "test-ua",
+    endpoint: "POST /v1/chat/completions",
+    model: "claude-sonnet-4-6",
+    provider: "anthropic",
+    accountEmail: "alice@example.com",
+    status: "success",
+    failureKind: null,
+    statusCode: 200,
+    latencyMs: 250,
+    usage: {
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+      reasoningOutputTokens: 0,
+    },
+    ...over,
+  };
+}
+
+test("StatsRecorder aggregates across all three views", () => {
+  const recorder = new StatsRecorder();
+  recorder.applyEvent(makeStatsEvent());
+  recorder.applyEvent(makeStatsEvent({ ts: "2026-05-09T12:00:01.000Z" }));
+  recorder.applyEvent(
+    makeStatsEvent({
+      ts: "2026-05-09T12:00:02.000Z",
+      status: "failure",
+      statusCode: 502,
+      usage: null,
+    }),
+  );
+  const snapshot = recorder.getSnapshot();
+  assert.equal(snapshot.totals.requests, 3);
+  assert.equal(snapshot.totals.successes, 2);
+  assert.equal(snapshot.totals.failures, 1);
+  assert.equal(snapshot.totals.totalInputTokens, 20);
+  assert.equal(snapshot.totals.totalOutputTokens, 10);
+  assert.equal(snapshot.totals.firstSeenAt, "2026-05-09T12:00:00.000Z");
+
+  const clientKey = "a".repeat(64);
+  assert.equal(snapshot.byClient[clientKey].requests, 3);
+  assert.equal(snapshot.byClient[clientKey].apiKeyShort, "a".repeat(12));
+
+  const accKey = "anthropic:alice@example.com";
+  assert.equal(snapshot.byAccount[accKey].requests, 3);
+  assert.equal(snapshot.byAccount[accKey].provider, "anthropic");
+
+  const apiKey = "POST /v1/chat/completions|claude-sonnet-4-6|anthropic";
+  assert.equal(snapshot.byApi[apiKey].requests, 3);
+});
+
+test("StatsRecorder splits buckets by client / account / api key", () => {
+  const recorder = new StatsRecorder();
+  recorder.applyEvent(makeStatsEvent());
+  recorder.applyEvent(
+    makeStatsEvent({
+      apiKeyHash: "b".repeat(64),
+      accountEmail: "bob@example.com",
+      endpoint: "POST /v1/messages",
+      model: "claude-opus-4-7",
+    }),
+  );
+  const snapshot = recorder.getSnapshot();
+  assert.equal(Object.keys(snapshot.byClient).length, 2);
+  assert.equal(Object.keys(snapshot.byAccount).length, 2);
+  assert.equal(Object.keys(snapshot.byApi).length, 2);
+});
+
+test("StatsRecorder skips byAccount when provider/email missing", () => {
+  const recorder = new StatsRecorder();
+  recorder.applyEvent(
+    makeStatsEvent({ accountEmail: null, provider: null, usage: null }),
+  );
+  const snapshot = recorder.getSnapshot();
+  assert.equal(Object.keys(snapshot.byAccount).length, 0);
+  assert.equal(Object.keys(snapshot.byClient).length, 1);
+  assert.equal(
+    snapshot.byApi["POST /v1/chat/completions|claude-sonnet-4-6|unknown"]
+      .requests,
+    1,
+  );
+  assert.equal(snapshot.totals.requests, 1);
+});
+
+test("createServer stats endpoint records mounted route prefix", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-stats-"));
+  const recorder = new StatsRecorder();
+  recorder.start(tmp);
+  const app = createServer(
+    {
+      host: "",
+      port: 0,
+      "auth-dir": tmp,
+      "api-keys": new Set(["sk-test"]),
+      "body-limit": "1mb",
+      cloaking: {},
+      timeouts: {
+        "messages-ms": 1000,
+        "stream-messages-ms": 1000,
+        "count-tokens-ms": 1000,
+      },
+      stats: { enabled: true },
+      debug: "off",
+    } as any,
+    {} as any,
+    recorder,
+  );
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as any).port;
+    const headers = { Authorization: "Bearer sk-test" };
+    await fetch(`http://127.0.0.1:${port}/admin/stats`, { headers });
+    const second = await fetch(`http://127.0.0.1:${port}/admin/stats`, {
+      headers,
+    });
+    const body = await second.json();
+    assert.equal(body.byApi["GET /admin/stats|unknown|unknown"].requests, 1);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await recorder.stop();
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("createServer stats records client disconnects on close", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-stats-"));
+  const recorder = new StatsRecorder();
+  recorder.start(tmp);
+  const app = createServer(
+    {
+      host: "",
+      port: 0,
+      "auth-dir": tmp,
+      "api-keys": new Set(["sk-test"]),
+      "body-limit": "1mb",
+      cloaking: {},
+      timeouts: {
+        "messages-ms": 1000,
+        "stream-messages-ms": 1000,
+        "count-tokens-ms": 1000,
+      },
+      stats: { enabled: true },
+      debug: "off",
+    } as any,
+    {} as any,
+    recorder,
+  );
+  let resolveReached!: () => void;
+  const reached = new Promise<void>((resolve) => {
+    resolveReached = resolve;
+  });
+  app.get("/v1/hang", (_req, res) => {
+    if (res.locals.stats) res.locals.stats.model = "hang";
+    resolveReached();
+    // Intentionally never write a response; the client abort below should
+    // hit the stats close-path rather than finish-path.
+  });
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as any).port;
+    const controller = new AbortController();
+    const request = fetch(`http://127.0.0.1:${port}/v1/hang`, {
+      headers: { Authorization: "Bearer sk-test" },
+      signal: controller.signal,
+    }).catch(() => null);
+    await reached;
+    controller.abort();
+    await request;
+    await timeout(25);
+
+    const snap = recorder.getSnapshot();
+    assert.equal(snap.totals.requests, 1);
+    assert.equal(snap.totals.failures, 1);
+    assert.equal(snap.byApi["GET /v1/hang|hang|unknown"].failures, 1);
+
+    await recorder.stop();
+    const event = JSON.parse(fs.readFileSync(statsFilePath(tmp), "utf-8"));
+    assert.equal(event.status, "failure");
+    assert.equal(event.statusCode, 499);
+    assert.equal(event.failureKind, "client_disconnect");
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await recorder.stop();
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("StatsRecorder persists to JSONL and replays on restart", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-stats-"));
+  try {
+    const recorder = new StatsRecorder();
+    recorder.start(tmp);
+    recorder.record({
+      apiKeyHash: "a".repeat(64),
+      ip: "127.0.0.1",
+      ua: "test-ua",
+      endpoint: "POST /v1/chat/completions",
+      model: "claude-sonnet-4-6",
+      provider: "anthropic",
+      accountEmail: "alice@example.com",
+      status: "success",
+      failureKind: null,
+      statusCode: 200,
+      latencyMs: 100,
+      usage: {
+        inputTokens: 7,
+        outputTokens: 3,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+        reasoningOutputTokens: 0,
+      },
+    });
+    await recorder.stop();
+
+    // Verify the JSONL was written.
+    const content = fs.readFileSync(statsFilePath(tmp), "utf-8").trim();
+    assert.equal(content.split("\n").length, 1);
+    const parsed = JSON.parse(content);
+    assert.equal(parsed.endpoint, "POST /v1/chat/completions");
+    assert.equal(parsed.usage.inputTokens, 7);
+
+    // Replay into a fresh recorder.
+    const recovered = new StatsRecorder();
+    recovered.start(tmp);
+    const snap = recovered.getSnapshot();
+    assert.equal(snap.totals.requests, 1);
+    assert.equal(snap.totals.totalInputTokens, 7);
+    await recovered.stop();
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("replayStatsEvents skips corrupted lines", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-stats-"));
+  try {
+    const file = path.join(tmp, "stats.jsonl");
+    const valid = JSON.stringify(makeStatsEvent());
+    fs.writeFileSync(
+      file,
+      `${valid}\n{not-json}\n{"endpoint":"x"}\n${valid}\n`,
+    );
+    let applied = 0;
+    const result = replayStatsEvents(file, () => {
+      applied++;
+    });
+    assert.equal(applied, 2);
+    assert.equal(result.lines, 4);
+    assert.equal(result.skipped, 2);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("StatsRecorder replay ignores partial schema rows without polluting aggregates", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "auth2api-stats-"));
+  try {
+    fs.writeFileSync(statsFilePath(tmp), '{"endpoint":"x"}\n');
+    const recorder = new StatsRecorder();
+    recorder.start(tmp);
+    const snap = recorder.getSnapshot();
+    assert.equal(snap.totals.requests, 0);
+    assert.deepEqual(snap.byClient, {});
+    await recorder.stop();
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

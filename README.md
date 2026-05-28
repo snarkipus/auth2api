@@ -96,30 +96,31 @@ The server starts on `http://127.0.0.1:8317` by default. On first run, an API ke
 Copy `config.example.yaml` to `config.yaml` and edit as needed:
 
 ```yaml
-host: ""          # bind address, empty = 127.0.0.1
+host: "" # bind address, empty = 127.0.0.1
 port: 8317
 
-auth-dir: "~/.auth2api"   # where OAuth tokens are stored
+auth-dir: "~/.auth2api" # where OAuth tokens are stored
 
 api-keys:
-  - "your-api-key-here"   # clients use this to authenticate
+  - "your-api-key-here" # clients use this to authenticate
 
-body-limit: "200mb"       # maximum JSON request body size, useful for large-context usage
+body-limit: "200mb" # maximum JSON request body size, useful for large-context usage
 
 timeouts:
-  messages-ms: 120000         # non-stream /v1/messages timeout
-  stream-messages-ms: 600000  # stream /v1/messages timeout (10 min, suitable for Claude Code)
-  count-tokens-ms: 30000      # /v1/messages/count_tokens timeout
+  messages-ms: 120000 # non-stream /v1/messages timeout
+  stream-messages-ms: 600000 # stream /v1/messages timeout (10 min, suitable for Claude Code)
+  count-tokens-ms: 30000 # /v1/messages/count_tokens timeout
 
 # Request fingerprinting — controls how auth2api mimics Claude Code CLI
 cloaking:
-  cli-version: "2.1.88"   # CLI version to impersonate
-  entrypoint: "cli"        # billing attribution entrypoint (cli, mcp, sdk, etc.)
+  cli-version: "2.1.88" # CLI version to impersonate
+  entrypoint: "cli" # billing attribution entrypoint (cli, mcp, sdk, etc.)
 
-debug: "off"            # off | errors | verbose
+debug: "off" # off | errors | verbose
 ```
 
 `debug` supports three levels:
+
 - `off`: no extra logs
 - `errors`: log upstream/network failures and upstream error bodies
 - `verbose`: include `errors` logs plus per-request method, path, status, and duration
@@ -162,22 +163,22 @@ curl http://127.0.0.1:8317/v1/chat/completions \
 
 `GET /v1/models` lists only models for providers you've actually logged in to. The codex list is **fetched live** from `chatgpt.com/backend-api/codex/models` (cached 5 minutes, ETag-aware) so it always matches what your account can actually serve. Cursor models are fetched from Cursor's internal AvailableModels endpoint when possible, with a small fallback list. The current ChatGPT-account-supported set at the time of writing:
 
-| Model ID | Provider | Description |
-|----------|----------|-------------|
-| `claude-opus-4-7` | anthropic | Claude Opus 4.7 |
-| `claude-opus-4-6` | anthropic | Claude Opus 4.6 |
-| `claude-sonnet-4-6` | anthropic | Claude Sonnet 4.6 |
-| `claude-haiku-4-5-20251001` | anthropic | Claude Haiku 4.5 |
-| `claude-haiku-4-5` | anthropic | Alias for Claude Haiku 4.5 |
-| `gpt-5.5` | codex | GPT-5.5 (reasoning model) |
-| `gpt-5.4` | codex | GPT-5.4 |
-| `gpt-5.4-mini` | codex | GPT-5.4 Mini |
-| `gpt-5.3-codex` | codex | GPT-5.3 (Codex variant) |
-| `gpt-5.2` | codex | GPT-5.2 |
-| `cursor-claude-opus-4-7-medium` | cursor | Claude Opus 4.7 routed through Cursor |
-| `cursor-claude-sonnet-4-7-medium` | cursor | Claude Sonnet 4.7 routed through Cursor |
-| `cursor-default` | cursor | Cursor "Auto" model |
-| `cursor-premium` / `cursor-fast` / `cursor-composer` | cursor | Fallback ids when AvailableModels can't be reached |
+| Model ID                                             | Provider  | Description                                        |
+| ---------------------------------------------------- | --------- | -------------------------------------------------- |
+| `claude-opus-4-7`                                    | anthropic | Claude Opus 4.7                                    |
+| `claude-opus-4-6`                                    | anthropic | Claude Opus 4.6                                    |
+| `claude-sonnet-4-6`                                  | anthropic | Claude Sonnet 4.6                                  |
+| `claude-haiku-4-5-20251001`                          | anthropic | Claude Haiku 4.5                                   |
+| `claude-haiku-4-5`                                   | anthropic | Alias for Claude Haiku 4.5                         |
+| `gpt-5.5`                                            | codex     | GPT-5.5 (reasoning model)                          |
+| `gpt-5.4`                                            | codex     | GPT-5.4                                            |
+| `gpt-5.4-mini`                                       | codex     | GPT-5.4 Mini                                       |
+| `gpt-5.3-codex`                                      | codex     | GPT-5.3 (Codex variant)                            |
+| `gpt-5.2`                                            | codex     | GPT-5.2                                            |
+| `cursor-claude-opus-4-7-medium`                      | cursor    | Claude Opus 4.7 routed through Cursor              |
+| `cursor-claude-sonnet-4-7-medium`                    | cursor    | Claude Sonnet 4.7 routed through Cursor            |
+| `cursor-default`                                     | cursor    | Cursor "Auto" model                                |
+| `cursor-premium` / `cursor-fast` / `cursor-composer` | cursor    | Fallback ids when AvailableModels can't be reached |
 
 Short convenience aliases accepted by auth2api:
 
@@ -191,12 +192,12 @@ Routing: requests are dispatched to the matching pool by model name. `claude-*` 
 
 When **only Cursor has a logged-in account** (anthropic and codex are both empty), every model name routes to Cursor automatically — `cursor-` prefix becomes optional. This is what makes a Cursor-only auth2api a drop-in replacement for the Anthropic API or the OpenAI API:
 
-| Client behaviour | What auth2api does |
-|---|---|
-| `POST /v1/messages` `{"model":"claude-sonnet-4-5"}` | routes through Cursor and re-encodes the upstream stream as Anthropic Messages SSE |
-| `POST /v1/messages` `{"model":"opus"}` | maps `opus` → `claude-opus-4-7-medium` on Cursor, returns Anthropic Messages SSE |
-| `POST /v1/responses` `{"model":"gpt-5.5"}` | maps to `gpt-5.5-medium` on Cursor, returns OpenAI Responses SSE |
-| `POST /v1/chat/completions` `{"model":"claude-haiku-4-5"}` | maps to `claude-4.5-haiku` on Cursor |
+| Client behaviour                                           | What auth2api does                                                                 |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `POST /v1/messages` `{"model":"claude-sonnet-4-5"}`        | routes through Cursor and re-encodes the upstream stream as Anthropic Messages SSE |
+| `POST /v1/messages` `{"model":"opus"}`                     | maps `opus` → `claude-opus-4-7-medium` on Cursor, returns Anthropic Messages SSE   |
+| `POST /v1/responses` `{"model":"gpt-5.5"}`                 | maps to `gpt-5.5-medium` on Cursor, returns OpenAI Responses SSE                   |
+| `POST /v1/chat/completions` `{"model":"claude-haiku-4-5"}` | maps to `claude-4.5-haiku` on Cursor                                               |
 
 A small built-in alias table covers the names Anthropic / OpenAI SDKs and Claude Code use by default (`claude-sonnet-4-5`, `claude-opus-4-7`, `opus`, `sonnet`, `haiku`, `gpt-5.5`, `o3`, …) and translates them to Cursor's internal SKUs (`claude-4.5-sonnet`, `claude-opus-4-7-medium`, `gpt-5.5-medium`, …). Set `CURSOR_MODEL_ALIASES="my-name=claude-opus-4-7-max,foo=composer-2"` to extend the table without forking. Anything not in the table is passed through verbatim, so you can still hit Cursor's full SKU catalogue (e.g. `claude-opus-4-7-thinking-max`).
 
@@ -208,12 +209,12 @@ When **more than one provider has accounts**, the historical routing table above
 
 ### Endpoint × provider support matrix
 
-| Endpoint | anthropic | codex | cursor |
-|----------|-----------|-------|--------|
-| `POST /v1/chat/completions` | ✅ | ✅ (Chat ↔ Responses translator — reasoning as `reasoning_content`) | ✅ (`chat.completion.chunk` SSE; reasoning as `reasoning_content`) |
-| `POST /v1/responses` | ✅ | ✅ (passthrough) | ✅ |
-| `POST /v1/messages` | ✅ | ✅ (Anthropic ↔ Responses translator — see below) | ✅ (Anthropic Messages SSE — see below) |
-| `POST /v1/messages/count_tokens` | ✅ | ❌ (501) | ❌ (501) |
+| Endpoint                         | anthropic | codex                                                               | cursor                                                             |
+| -------------------------------- | --------- | ------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `POST /v1/chat/completions`      | ✅        | ✅ (Chat ↔ Responses translator — reasoning as `reasoning_content`) | ✅ (`chat.completion.chunk` SSE; reasoning as `reasoning_content`) |
+| `POST /v1/responses`             | ✅        | ✅ (passthrough)                                                    | ✅                                                                 |
+| `POST /v1/messages`              | ✅        | ✅ (Anthropic ↔ Responses translator — see below)                   | ✅ (Anthropic Messages SSE — see below)                            |
+| `POST /v1/messages/count_tokens` | ✅        | ❌ (501)                                                            | ❌ (501)                                                           |
 
 For Cursor all three OpenAI-compatible endpoints are wired natively: `req.path` selects the wire format the cursor provider emits (`openai-chat-completions`, `openai-responses`, or `anthropic-messages`). Non-streaming `/v1/chat/completions` aggregates the upstream stream into a single `chat.completion` JSON response.
 
@@ -237,16 +238,17 @@ The decoder routes Cursor's chain-of-thought (`reasoning`) bytes to `response.re
 
 ### Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `POST /v1/chat/completions` | OpenAI-compatible chat |
-| `POST /v1/responses` | OpenAI Responses API compatibility |
-| `POST /v1/messages` | Claude native passthrough |
-| `POST /v1/messages/count_tokens` | Claude token counting |
-| `GET /v1/models` | List available models |
-| `GET /admin/accounts` | Account health/status (API key required) |
-| `POST /admin/reload` | Reload tokens from disk (API key required) |
-| `GET /health` | Health check |
+| Endpoint                         | Description                                                           |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `POST /v1/chat/completions`      | OpenAI-compatible chat                                                |
+| `POST /v1/responses`             | OpenAI Responses API compatibility                                    |
+| `POST /v1/messages`              | Claude native passthrough                                             |
+| `POST /v1/messages/count_tokens` | Claude token counting                                                 |
+| `GET /v1/models`                 | List available models                                                 |
+| `GET /admin/accounts`            | Account health/status (API key required)                              |
+| `GET /admin/stats`               | Per-client / per-account / per-API call statistics (API key required) |
+| `POST /admin/reload`             | Reload tokens from disk (API key required)                            |
+| `GET /health`                    | Health check                                                          |
 
 ## Docker
 
@@ -398,13 +400,59 @@ Response shape:
 {
   "reloaded": {
     "anthropic": { "added": [], "updated": ["alice@…"], "unchanged": [] },
-    "codex":     { "added": [], "updated": [],          "unchanged": ["bob@…"] }
+    "codex": { "added": [], "updated": [], "unchanged": ["bob@…"] }
   },
   "generated_at": "2026-04-26T..."
 }
 ```
 
 Reload semantics are **upsert only**: new token files on disk are added to the in-memory pool, existing accounts whose `access_token` changed are updated (and any cooldown / `lastError` is cleared, but request/usage stats are preserved), and accounts that no longer exist on disk are kept in memory until the next restart (so historical stats aren't dropped if a token file is accidentally removed).
+
+### Call statistics: `/admin/stats`
+
+Every request that passes API-key auth is appended as a single line to `<auth-dir>/stats.jsonl` and added to an in-memory aggregate. On startup the aggregate is rebuilt by replaying the JSONL, so the snapshot survives restarts.
+
+`GET /admin/stats` returns three independent aggregate views plus a global `totals`:
+
+- `byClient[apiKeyHash]` — keyed by `sha256(api-key)`; tracks requests, success / failure counts, the five token counters, total latency, and the last seen IP / User-Agent.
+- `byAccount["<provider>:<email>"]` — keyed by upstream OAuth account.
+- `byApi["<endpoint>|<model>|<provider>"]` — keyed by endpoint × model × provider.
+
+```bash
+curl http://127.0.0.1:8317/admin/stats \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "byClient": {
+    "8f2a1d3c4e5f8f2a1d3c4e5f8f2a1d3c4e5f8f2a1d3c4e5f8f2a1d3c4e5f6789": {
+      "apiKeyShort": "8f2a1d3c4e5f",
+      "requests": 142, "successes": 140, "failures": 2,
+      "totalInputTokens": 12345, "totalOutputTokens": 6789,
+      "totalCacheReadInputTokens": 0, "totalLatencyMs": 286430,
+      "lastIp": "127.0.0.1", "lastUa": "claude-cli/2.1.88",
+      "firstSeenAt": "2026-05-09T08:00:00Z",
+      "lastSeenAt":  "2026-05-09T12:00:00Z"
+    }
+  },
+  "byAccount": {
+    "anthropic:alice@example.com": { "provider": "anthropic", "email": "alice@example.com", "requests": 100, ... }
+  },
+  "byApi": {
+    "POST /v1/chat/completions|claude-sonnet-4-6|anthropic": { "endpoint": "POST /v1/chat/completions", "model": "claude-sonnet-4-6", "provider": "anthropic", "requests": 80, ... }
+  },
+  "totals": { "requests": 142, "successes": 140, "failures": 2, ... },
+  "generated_at": "2026-05-09T12:00:00Z"
+}
+```
+
+The JSONL grows append-only; if it gets too large just stop the server and delete `stats.jsonl` to reset (the aggregate is flushed on shutdown). To disable stats entirely:
+
+```yaml
+stats:
+  enabled: false
+```
 
 Failure modes of the auto-notify (printed by `--login`):
 

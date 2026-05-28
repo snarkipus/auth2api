@@ -229,5 +229,13 @@ export async function handleStreamingResponse(
     }
   }
 
+  // Surface stream-extracted usage to the per-request stats slot (set
+  // by server.ts requireApiKey middleware). Skipped on disconnect so a
+  // half-streamed reply doesn't get attributed.
+  if (completed) {
+    const ctx = (resp.locals as any)?.stats;
+    if (ctx) ctx.usage = usage;
+  }
+
   return { completed, clientDisconnected, usage };
 }

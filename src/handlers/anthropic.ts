@@ -6,6 +6,7 @@ import { proxyWithRetry } from "../utils/http";
 import { resolveModel } from "../upstream/translator";
 import { handleStreamingResponse } from "../upstream/streaming";
 import { normalizeCodexResponsesBody } from "../upstream/codex-api";
+import { tagStatsModel, tagStatsUsage } from "../stats/recorder";
 import {
   anthropicToResponsesRequest,
   responsesToAnthropicMessage,
@@ -95,12 +96,7 @@ async function proxyCodexMessages(args: {
       const { textOut, reasoningOut, toolCalls, upstreamError, status, usage } =
         drained;
 
-      if (
-        upstreamError &&
-        !textOut &&
-        !reasoningOut &&
-        toolCalls.size === 0
-      ) {
+      if (upstreamError && !textOut && !reasoningOut && toolCalls.size === 0) {
         if (!resp.headersSent) {
           resp.status(502).json({
             error: { message: upstreamError, type: "upstream_error" },
@@ -143,14 +139,16 @@ async function proxyCodexMessages(args: {
         usage,
       };
       const anthropicJson = responsesToAnthropicMessage(fauxResponses, model);
-      provider.manager.recordSuccess(account.token.email, {
+      const codexMsgUsage = {
         inputTokens: usage?.input_tokens || 0,
         outputTokens: usage?.output_tokens || 0,
         cacheCreationInputTokens: 0,
         cacheReadInputTokens: usage?.input_tokens_details?.cached_tokens || 0,
         reasoningOutputTokens:
           usage?.output_tokens_details?.reasoning_tokens || 0,
-      });
+      };
+      provider.manager.recordSuccess(account.token.email, codexMsgUsage);
+      tagStatsUsage(resp, codexMsgUsage);
       resp.json(anthropicJson);
     },
   });
@@ -184,6 +182,7 @@ export function createMessagesHandler(
 
       const model = resolveModel(body.model || "claude-sonnet-4-6");
       const provider = registry.forModel(model);
+      tagStatsModel(resp, model, provider.id);
 
       // Codex's upstream is the OpenAI Responses API; route /v1/messages
       // through a dedicated translator path that converts Anthropic
@@ -198,7 +197,10 @@ export function createMessagesHandler(
       // Cursor speaks OpenAI Responses natively, but its callMessages will
       // re-encode the SSE stream as Anthropic Messages when invoked through
       // /v1/messages.
-      if (provider.nativeFormat === "openai-responses" && provider.id !== "cursor") {
+      if (
+        provider.nativeFormat === "openai-responses" &&
+        provider.id !== "cursor"
+      ) {
         resp.status(400).json({
           error: {
             message: `This model is served by the ${provider.id} provider, which does not support /v1/messages.`,
@@ -247,10 +249,9 @@ export function createMessagesHandler(
             }
           } else {
             const anthropicResp = await upstream.json();
-            provider.manager.recordSuccess(
-              account.token.email,
-              extractUsage(anthropicResp),
-            );
+            const usage = extractUsage(anthropicResp);
+            provider.manager.recordSuccess(account.token.email, usage);
+            tagStatsUsage(resp, usage);
             resp.json(anthropicResp);
           }
         },
@@ -272,6 +273,7 @@ export function createCountTokensHandler(
       const body = req.body;
       const model = resolveModel(body?.model || "claude-sonnet-4-6");
       const provider = registry.forModel(model);
+      tagStatsModel(resp, model, provider.id);
 
       if (!provider.callCountTokens) {
         resp.status(501).json({

@@ -35,12 +35,28 @@ const FAILURE_RESPONSES: Record<
   network: { status: 503, message: "Upstream network temporarily unavailable" },
 };
 
+function statsContext(resp: ExpressResponse): any {
+  return (resp.locals as any)?.stats;
+}
+
+function tagStatsFailure(
+  resp: ExpressResponse,
+  failureKind: string | null,
+  provider?: ProviderId,
+): void {
+  const ctx = statsContext(resp);
+  if (!ctx) return;
+  ctx.failureKind = failureKind;
+  if (provider) ctx.provider = provider;
+}
+
 export function accountUnavailable(
   resp: ExpressResponse,
   result: Extract<AccountResult, { account: null }>,
   provider: ProviderId,
 ): void {
   const { failureKind, retryAfterMs } = result;
+  tagStatsFailure(resp, failureKind || "no_account", provider);
 
   // No accounts at all for this provider.
   if (!failureKind) {
@@ -130,12 +146,22 @@ export async function proxyWithRetry(
       }
       const account = result.account;
       manager.recordAttempt(account.token.email);
+      // Surface upstream account attribution to the per-request stats slot
+      // (set by server.ts requireApiKey middleware). Done here so failure
+      // paths and abandoned requests still get an account label, not just
+      // success calls.
+      const statsCtx = (resp.locals as any)?.stats;
+      if (statsCtx) {
+        statsCtx.accountEmail = account.token.email;
+        statsCtx.provider = manager.provider;
+      }
 
       let upstream: Response;
       try {
         upstream = await options.upstream(account, requestController.signal);
       } catch (err: any) {
         if (requestController.signal.aborted) return;
+        tagStatsFailure(resp, "network", manager.provider);
         manager.recordFailure(account.token.email, "network", err.message);
         if (isDebugLevel(config.debug, "errors")) {
           console.error(
@@ -155,10 +181,12 @@ export async function proxyWithRetry(
       }
 
       if (upstream.ok) {
+        tagStatsFailure(resp, null, manager.provider);
         try {
           await options.success(upstream, account);
         } catch (err: any) {
           if (requestController.signal.aborted || resp.destroyed) return;
+          tagStatsFailure(resp, "handler_error", manager.provider);
           const message = err?.message || String(err);
           if (isDebugLevel(config.debug, "errors")) {
             console.error(`${tag} success handler failed: ${message}`);
@@ -175,6 +203,15 @@ export async function proxyWithRetry(
       }
 
       lastStatus = upstream.status;
+      tagStatsFailure(
+        resp,
+        lastStatus >= 400 && lastStatus < 500
+          ? lastStatus === 401 || lastStatus === 403 || lastStatus === 429
+            ? classifyFailure(lastStatus)
+            : "client_error"
+          : classifyFailure(lastStatus),
+        manager.provider,
+      );
       lastRetryAfter = upstream.headers.get("retry-after");
       try {
         lastErrBody = await upstream.text();

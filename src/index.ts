@@ -9,6 +9,7 @@ import { runCursorBrowserLogin } from "./auth/cursor/browser-oauth";
 import { buildRegistry, ProviderRegistry } from "./providers/registry";
 import { createServer } from "./server";
 import { notifyServerReload } from "./utils/notify-reload";
+import { StatsRecorder } from "./stats/recorder";
 
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({
@@ -168,7 +169,13 @@ async function startServer(): Promise<void> {
     }
   }
 
-  const app = createServer(config, registry);
+  let statsRecorder: StatsRecorder | undefined;
+  if (config.stats.enabled) {
+    statsRecorder = new StatsRecorder();
+    statsRecorder.start(authDir);
+  }
+
+  const app = createServer(config, registry, statsRecorder);
   const host = config.host || "127.0.0.1";
   const port = config.port;
 
@@ -181,6 +188,7 @@ async function startServer(): Promise<void> {
     console.log(`  POST /v1/messages/count_tokens`);
     console.log(`  GET  /v1/models`);
     console.log(`  GET  /admin/accounts`);
+    if (statsRecorder) console.log(`  GET  /admin/stats`);
     console.log(`  GET  /health`);
   });
 
@@ -188,6 +196,12 @@ async function startServer(): Promise<void> {
     for (const p of registry.all()) {
       p.manager.stopAutoRefresh();
       p.manager.stopStatsLogger();
+    }
+    if (statsRecorder) {
+      // Best-effort flush — exit even if close hangs so SIGINT stays responsive.
+      statsRecorder.stop().finally(() => process.exit(0));
+      setTimeout(() => process.exit(0), 1000).unref();
+      return;
     }
     process.exit(0);
   });

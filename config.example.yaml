@@ -19,6 +19,15 @@ timeouts:
   stream-messages-ms: 600000  # stream /v1/messages timeout, suitable for Claude Code long tasks
   count-tokens-ms: 30000      # /v1/messages/count_tokens timeout
 
+# Per-request call statistics. Aggregated by:
+#   - client (sha256(api-key))
+#   - upstream account (provider + email)
+#   - api endpoint x model x provider
+# Events are appended to <auth-dir>/stats.jsonl and replayed on startup.
+# Query the live snapshot via GET /admin/stats (requires API key).
+stats:
+  enabled: true
+
 # Debug logging level:
 # off = no extra logs
 # errors = upstream/network failure details

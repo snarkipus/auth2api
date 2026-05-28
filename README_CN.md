@@ -96,30 +96,31 @@ node dist/index.js
 复制 `config.example.yaml` 为 `config.yaml`，然后按需修改：
 
 ```yaml
-host: ""          # 绑定地址，空字符串表示 127.0.0.1
+host: "" # 绑定地址，空字符串表示 127.0.0.1
 port: 8317
 
-auth-dir: "~/.auth2api"   # OAuth token 存储目录
+auth-dir: "~/.auth2api" # OAuth token 存储目录
 
 api-keys:
-  - "your-api-key-here"   # 客户端使用这个 key 访问代理
+  - "your-api-key-here" # 客户端使用这个 key 访问代理
 
-body-limit: "200mb"       # 最大 JSON 请求体大小，适合大上下文场景
+body-limit: "200mb" # 最大 JSON 请求体大小，适合大上下文场景
 
 timeouts:
-  messages-ms: 120000         # 非流式 /v1/messages 超时
-  stream-messages-ms: 600000  # 流式 /v1/messages 超时（10 分钟，适合 Claude Code 长任务）
-  count-tokens-ms: 30000      # /v1/messages/count_tokens 超时
+  messages-ms: 120000 # 非流式 /v1/messages 超时
+  stream-messages-ms: 600000 # 流式 /v1/messages 超时（10 分钟，适合 Claude Code 长任务）
+  count-tokens-ms: 30000 # /v1/messages/count_tokens 超时
 
 # 请求指纹 — 控制 auth2api 如何模拟 Claude Code CLI
 cloaking:
-  cli-version: "2.1.88"   # 模拟的 CLI 版本号
-  entrypoint: "cli"        # 计费归属入口（cli、mcp、sdk 等）
+  cli-version: "2.1.88" # 模拟的 CLI 版本号
+  entrypoint: "cli" # 计费归属入口（cli、mcp、sdk 等）
 
-debug: "off"            # off | errors | verbose
+debug: "off" # off | errors | verbose
 ```
 
 `debug` 支持三级日志：
+
 - `off`：不输出额外调试日志
 - `errors`：记录上游/网络失败信息和上游错误响应正文
 - `verbose`：在 `errors` 基础上，再输出每个请求的方法、路径、状态码和耗时
@@ -154,22 +155,22 @@ curl http://127.0.0.1:8317/v1/chat/completions \
 
 `GET /v1/models` 只列出已登录 provider 的模型。Codex 列表是从 `chatgpt.com/backend-api/codex/models` **实时拉取**(5 分钟缓存 + ETag),始终与你的账号实际可用模型一致。Cursor 会尽量从内部 AvailableModels 端点拉取，失败时使用少量 fallback 模型。当前 ChatGPT 账号支持的 codex 模型集合:
 
-| 模型 ID | Provider | 说明 |
-|--------|----------|------|
-| `claude-opus-4-7` | anthropic | Claude Opus 4.7 |
-| `claude-opus-4-6` | anthropic | Claude Opus 4.6 |
-| `claude-sonnet-4-6` | anthropic | Claude Sonnet 4.6 |
-| `claude-haiku-4-5-20251001` | anthropic | Claude Haiku 4.5 |
-| `claude-haiku-4-5` | anthropic | Claude Haiku 4.5 别名 |
-| `gpt-5.5` | codex | GPT-5.5(reasoning model) |
-| `gpt-5.4` | codex | GPT-5.4 |
-| `gpt-5.4-mini` | codex | GPT-5.4 Mini |
-| `gpt-5.3-codex` | codex | GPT-5.3(Codex 变体) |
-| `gpt-5.2` | codex | GPT-5.2 |
-| `cursor-claude-opus-4-7-medium` | cursor | 通过 Cursor 转发的 Claude Opus 4.7 |
-| `cursor-claude-sonnet-4-7-medium` | cursor | 通过 Cursor 转发的 Claude Sonnet 4.7 |
-| `cursor-default` | cursor | Cursor "Auto" 模型 |
-| `cursor-premium` / `cursor-fast` / `cursor-composer` | cursor | AvailableModels 拉取失败时使用的 fallback id |
+| 模型 ID                                              | Provider  | 说明                                         |
+| ---------------------------------------------------- | --------- | -------------------------------------------- |
+| `claude-opus-4-7`                                    | anthropic | Claude Opus 4.7                              |
+| `claude-opus-4-6`                                    | anthropic | Claude Opus 4.6                              |
+| `claude-sonnet-4-6`                                  | anthropic | Claude Sonnet 4.6                            |
+| `claude-haiku-4-5-20251001`                          | anthropic | Claude Haiku 4.5                             |
+| `claude-haiku-4-5`                                   | anthropic | Claude Haiku 4.5 别名                        |
+| `gpt-5.5`                                            | codex     | GPT-5.5(reasoning model)                     |
+| `gpt-5.4`                                            | codex     | GPT-5.4                                      |
+| `gpt-5.4-mini`                                       | codex     | GPT-5.4 Mini                                 |
+| `gpt-5.3-codex`                                      | codex     | GPT-5.3(Codex 变体)                          |
+| `gpt-5.2`                                            | codex     | GPT-5.2                                      |
+| `cursor-claude-opus-4-7-medium`                      | cursor    | 通过 Cursor 转发的 Claude Opus 4.7           |
+| `cursor-claude-sonnet-4-7-medium`                    | cursor    | 通过 Cursor 转发的 Claude Sonnet 4.7         |
+| `cursor-default`                                     | cursor    | Cursor "Auto" 模型                           |
+| `cursor-premium` / `cursor-fast` / `cursor-composer` | cursor    | AvailableModels 拉取失败时使用的 fallback id |
 
 auth2api 额外支持以下便捷别名：
 
@@ -183,12 +184,12 @@ auth2api 额外支持以下便捷别名：
 
 当 **只有 Cursor 一个 provider 登录了账号**（anthropic、codex 都为空）时，所有模型名自动走 Cursor，`cursor-` 前缀变成可选。这意味着 Cursor 单 provider 的 auth2api 可以直接当 Anthropic API 或 OpenAI API 用：
 
-| 客户端发送 | auth2api 行为 |
-|---|---|
-| `POST /v1/messages` `{"model":"claude-sonnet-4-5"}` | 走 Cursor，把上游流重新编码成 Anthropic Messages SSE |
-| `POST /v1/messages` `{"model":"opus"}` | `opus` → `claude-opus-4-7-medium`，回 Anthropic Messages SSE |
-| `POST /v1/responses` `{"model":"gpt-5.5"}` | `gpt-5.5` → `gpt-5.5-medium`，回 OpenAI Responses SSE |
-| `POST /v1/chat/completions` `{"model":"claude-haiku-4-5"}` | `claude-haiku-4-5` → `claude-4.5-haiku` |
+| 客户端发送                                                 | auth2api 行为                                                |
+| ---------------------------------------------------------- | ------------------------------------------------------------ |
+| `POST /v1/messages` `{"model":"claude-sonnet-4-5"}`        | 走 Cursor，把上游流重新编码成 Anthropic Messages SSE         |
+| `POST /v1/messages` `{"model":"opus"}`                     | `opus` → `claude-opus-4-7-medium`，回 Anthropic Messages SSE |
+| `POST /v1/responses` `{"model":"gpt-5.5"}`                 | `gpt-5.5` → `gpt-5.5-medium`，回 OpenAI Responses SSE        |
+| `POST /v1/chat/completions` `{"model":"claude-haiku-4-5"}` | `claude-haiku-4-5` → `claude-4.5-haiku`                      |
 
 内置一份小的别名映射表，覆盖 Anthropic / OpenAI SDK 与 Claude Code 默认会用的标准名（`claude-sonnet-4-5`、`claude-opus-4-7`、`opus`、`sonnet`、`haiku`、`gpt-5.5`、`o3` 等），翻译到 Cursor 内部 SKU（`claude-4.5-sonnet`、`claude-opus-4-7-medium`、`gpt-5.5-medium` 等）。可以通过环境变量 `CURSOR_MODEL_ALIASES="my-name=claude-opus-4-7-max,foo=composer-2"` 扩展。表里没有的名字会原样下发到 Cursor，所以 Cursor 的完整 SKU 列表（如 `claude-opus-4-7-thinking-max`）依然可用。
 
@@ -200,12 +201,12 @@ auth2api 额外支持以下便捷别名：
 
 ### 端点 × Provider 支持矩阵
 
-| Endpoint | anthropic | codex | cursor |
-|----------|-----------|-------|--------|
-| `POST /v1/chat/completions` | ✅ | ✅（Chat ↔ Responses 翻译；reasoning 走 `reasoning_content`） | ✅（`chat.completion.chunk` SSE；reasoning 走 `reasoning_content` 字段） |
-| `POST /v1/responses` | ✅ | ✅（直通） | ✅ |
-| `POST /v1/messages` | ✅ | ✅（Anthropic ↔ Responses 翻译，详见下文） | ✅（Anthropic Messages SSE，详见下文） |
-| `POST /v1/messages/count_tokens` | ✅ | ❌（501） | ❌（501） |
+| Endpoint                         | anthropic | codex                                                         | cursor                                                                   |
+| -------------------------------- | --------- | ------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `POST /v1/chat/completions`      | ✅        | ✅（Chat ↔ Responses 翻译；reasoning 走 `reasoning_content`） | ✅（`chat.completion.chunk` SSE；reasoning 走 `reasoning_content` 字段） |
+| `POST /v1/responses`             | ✅        | ✅（直通）                                                    | ✅                                                                       |
+| `POST /v1/messages`              | ✅        | ✅（Anthropic ↔ Responses 翻译，详见下文）                    | ✅（Anthropic Messages SSE，详见下文）                                   |
+| `POST /v1/messages/count_tokens` | ✅        | ❌（501）                                                     | ❌（501）                                                                |
 
 针对 Cursor，三个 OpenAI 兼容端点全部走原生实现（不经过 anthropic 翻译链）：`req.path` 决定 cursor provider 输出的协议格式（`openai-chat-completions` / `openai-responses` / `anthropic-messages`）。非流式 `/v1/chat/completions` 通过把上游 SSE 聚合成单个 `chat.completion` JSON 来支持。
 
@@ -229,16 +230,17 @@ Decoder 会把 Cursor 上游的 chain-of-thought（reasoning）字节路由到 `
 
 ### 接口列表
 
-| Endpoint | 说明 |
-|----------|------|
-| `POST /v1/chat/completions` | OpenAI 兼容聊天接口 |
-| `POST /v1/responses` | OpenAI Responses API 兼容接口 |
-| `POST /v1/messages` | Claude 原生消息透传 |
-| `POST /v1/messages/count_tokens` | Claude token 计数 |
-| `GET /v1/models` | 列出可用模型 |
-| `GET /admin/accounts` | 查看账号健康状态（需要 API key） |
-| `POST /admin/reload` | 从磁盘重新加载 token（需要 API key） |
-| `GET /health` | 健康检查 |
+| Endpoint                         | 说明                                                 |
+| -------------------------------- | ---------------------------------------------------- |
+| `POST /v1/chat/completions`      | OpenAI 兼容聊天接口                                  |
+| `POST /v1/responses`             | OpenAI Responses API 兼容接口                        |
+| `POST /v1/messages`              | Claude 原生消息透传                                  |
+| `POST /v1/messages/count_tokens` | Claude token 计数                                    |
+| `GET /v1/models`                 | 列出可用模型                                         |
+| `GET /admin/accounts`            | 查看账号健康状态（需要 API key）                     |
+| `GET /admin/stats`               | 按客户端/账号/接口三维聚合的调用统计（需要 API key） |
+| `POST /admin/reload`             | 从磁盘重新加载 token（需要 API key）                 |
+| `GET /health`                    | 健康检查                                             |
 
 ## Docker
 
@@ -322,13 +324,60 @@ curl -X POST http://127.0.0.1:8317/admin/reload \
 {
   "reloaded": {
     "anthropic": { "added": [], "updated": ["alice@…"], "unchanged": [] },
-    "codex":     { "added": [], "updated": [],          "unchanged": ["bob@…"] }
+    "codex": { "added": [], "updated": [], "unchanged": ["bob@…"] }
   },
   "generated_at": "2026-04-26T..."
 }
 ```
 
 重载语义为 **upsert**:磁盘上新出现的 token 文件会被添加到内存池;已有账号若 `access_token` 变化则替换(同时清掉 cooldown / `lastError`,但请求/用量统计保留);磁盘上消失的账号文件**不会**从内存中移除,以免误删 token 文件丢失历史统计——如确需移除,请重启服务。
+
+### 调用统计 `/admin/stats`
+
+每一个通过 API key 鉴权的请求都会被记录一行到 `<auth-dir>/stats.jsonl`，同时维护一份内存聚合视图，服务启动时会自动重放磁盘上的事件以恢复历史数据。
+
+`GET /admin/stats` 返回三个互相独立的聚合视图：
+
+- `byClient[apiKeyHash]` —— 按客户端（sha256(API key)）聚合：请求数、成功/失败、五项 token、累计延迟、最近一次 IP 与 User-Agent
+- `byAccount["<provider>:<email>"]` —— 按上游 OAuth 账号聚合
+- `byApi["<endpoint>|<model>|<provider>"]` —— 按 endpoint × model × provider 三元组聚合
+- `totals` —— 全局合计
+
+```bash
+curl http://127.0.0.1:8317/admin/stats \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "byClient": {
+    "8f2a1d3c4e5f8f2a1d3c4e5f8f2a1d3c4e5f8f2a1d3c4e5f8f2a1d3c4e5f6789": {
+      "apiKeyShort": "8f2a1d3c4e5f",
+      "requests": 142, "successes": 140, "failures": 2,
+      "totalInputTokens": 12345, "totalOutputTokens": 6789,
+      "totalCacheReadInputTokens": 0, "totalLatencyMs": 286430,
+      "lastIp": "127.0.0.1", "lastUa": "claude-cli/2.1.88",
+      "firstSeenAt": "2026-05-09T08:00:00Z",
+      "lastSeenAt":  "2026-05-09T12:00:00Z"
+    }
+  },
+  "byAccount": {
+    "anthropic:alice@example.com": { "provider": "anthropic", "email": "alice@example.com", "requests": 100, ... }
+  },
+  "byApi": {
+    "POST /v1/chat/completions|claude-sonnet-4-6|anthropic": { "endpoint": "POST /v1/chat/completions", "model": "claude-sonnet-4-6", "provider": "anthropic", "requests": 80, ... }
+  },
+  "totals": { "requests": 142, "successes": 140, "failures": 2, ... },
+  "generated_at": "2026-05-09T12:00:00Z"
+}
+```
+
+数据会无限追加。如果文件过大，停服后直接删除 `stats.jsonl` 即可重置；停服时会主动 flush 一次。完全不想要这个功能可以在 `config.yaml` 里写：
+
+```yaml
+stats:
+  enabled: false
+```
 
 `--login` 端的提示信息:
 

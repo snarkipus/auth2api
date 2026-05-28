@@ -255,7 +255,13 @@ The decoder routes Cursor's chain-of-thought (`reasoning`) bytes to `response.re
 docker build -t auth2api:local .
 ```
 
-For real Codex use, `config.yaml` must be mounted into the container and token files must live in the same Docker data volume the server will use. In Docker config, set `host: "0.0.0.0"` and `auth-dir: "/data"`; bind the host port to `127.0.0.1` unless you intentionally want network exposure.
+For real Codex use, `config.yaml` must be mounted into the container and token files must live in the same Docker data volume the server will use. In Docker config, set `host: "0.0.0.0"` and `auth-dir: "/data"` so the server listens inside the container and uses the mounted token store.
+
+The Docker publish mode controls who can reach that in-container listener:
+
+- For host-only use, bind the published port to loopback: `-p 127.0.0.1:8317:8317`. This is the safest default for local clients on the same host, but other Docker networks and sidecar containers cannot reach it through the host.
+- For another container on the same Docker network, attach both containers to that network and use `http://auth2api:8317` (or the container's network alias) instead of publishing a host port.
+- Avoid `-p 0.0.0.0:8317:8317` unless you intentionally want LAN/public exposure and have a trusted firewall, VPN, or reverse proxy in front of auth2api.
 
 ```bash
 # 1. Store Codex OAuth tokens in the Docker data volume
@@ -298,6 +304,17 @@ docker run -d \
   -v "$PWD/config.yaml:/config/config.yaml:ro" \
   auth2api:local
 ```
+
+If a consumer runs in a separate Docker network (for example a sandbox or local gateway container), attach `auth2api` to that network and point the consumer at the network alias:
+
+```bash
+docker network connect <consumer-network> auth2api
+
+# In the consumer config, use the Docker-network URL:
+# http://auth2api:8317/v1
+```
+
+This keeps the host publish loopback-only while making auth2api reachable to the specific Docker network that needs it. The container must still use `host: "0.0.0.0"` in `config.yaml`; if it listens on `127.0.0.1` inside the container, other containers cannot connect even when they share a network.
 
 Or with docker-compose:
 

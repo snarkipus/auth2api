@@ -2,7 +2,7 @@ services:
   auth2api:
     build: .
     volumes:
-      - ./config.yaml:/config/config.yaml
+      - ./config.yaml:/config/config.yaml:ro
       - auth-data:/data
     environment:
       - NODE_ENV=production
@@ -13,6 +13,8 @@ services:
 
 volumes:
   auth-data:
+    external: true
+    name: auth2api-data
 
 networks:
   docker-lab:

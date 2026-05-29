@@ -6,6 +6,7 @@
 - `npm test` runs all `tests/*.test.ts` with `tsx --test` and mocked upstreams.
 - Focus tests with `npx tsx --test tests/codex.test.ts` or `npx tsx --test --test-name-pattern "reload" tests/codex.test.ts`.
 - `npm run test:smoke` only runs `tests/smoke.test.ts`; README mentions this, but it is not the full suite.
+- `npm run test:e2e:responses` runs live `/v1/responses` non-streaming and streaming checks against `BASE_URL` (default `http://127.0.0.1:8317`) with `MODEL` defaulting to `gpt-5.5`; it reads the first API key from `config.yaml` unless `API_KEY` is set and consumes upstream quota.
 - `npm run prettier` rewrites only `src/**/*.ts` and `tests/**/*.ts`; there is no lint script.
 - Dev server: `npm run dev`. Built server: `npm run build && npm start`.
 - Login flows use the app entrypoint: `npm run login`, or provider-specific `tsx src/index.ts --login --provider=codex|cursor`.

@@ -10,6 +10,7 @@
     "login": "tsx src/index.ts --login",
     "test": "tsx --test tests/*.test.ts",
     "test:smoke": "tsx --test tests/smoke.test.ts",
+    "test:e2e:responses": "./scripts/responses-e2e.sh",
     "test:docker": "./scripts/docker-smoke.sh",
     "docker:login:codex": "./scripts/docker-login-codex.sh",
     "docker:run": "./scripts/docker-run.sh",

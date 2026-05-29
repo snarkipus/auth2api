@@ -277,6 +277,9 @@ API_KEY=<your-api-key> npm run docker:verify
 
 # Optional live Codex /v1/responses check; consumes account quota
 API_KEY=<your-api-key> VERIFY_CODEX=1 npm run docker:verify
+
+# Live /v1/responses e2e checks for non-streaming and streaming responses
+API_KEY=<your-api-key> npm run test:e2e:responses
 ```
 
 The scripts default to `IMAGE_NAME=auth2api:local`, `CONFIG_PATH=./config.yaml`, `DATA_VOLUME=auth2api-data`, `CONTAINER_NAME=auth2api`, and `HOST_PORT=8317`. Override them as environment variables:
@@ -287,6 +290,8 @@ HOST_PORT=18317 \
 REMOVE_EXISTING=1 \
 npm run docker:run
 ```
+
+`npm run test:e2e:responses` defaults to `BASE_URL=http://127.0.0.1:8317`, `MODEL=gpt-5.5`, and reads the first API key from `config.yaml` when `API_KEY` is not set. It sends one non-streaming `/v1/responses` request expecting `auth2api ok`, then one streaming request expecting `stream ok` and the standard Responses SSE lifecycle events.
 
 Manual equivalent:
 
@@ -462,11 +467,21 @@ Failure modes of the auto-notify (printed by `--login`):
 
 ## Tests
 
-A test suite is included using mocked upstream responses (no real Claude service calls):
+The normal test suite uses mocked upstream responses and does not call real provider APIs:
 
 ```bash
-npm run test:smoke
+npm test
 ```
+
+For a focused smoke subset, run `npm run test:smoke`.
+
+For live runtime validation of `/v1/responses`, start auth2api first and run:
+
+```bash
+npm run test:e2e:responses
+```
+
+This sends one non-streaming request and one streaming request using `gpt-5.5`. It reads the first API key from `config.yaml` by default, or accepts `API_KEY`, `BASE_URL`, and `MODEL` overrides. This test consumes upstream account quota.
 
 ## Inspired by
 

@@ -9,6 +9,13 @@ services:
     environment:
       - NODE_ENV=production
     restart: unless-stopped
+    networks:
+      - default
+      - docker-lab
 
 volumes:
   auth-data:
+
+networks:
+  docker-lab:
+    external: true

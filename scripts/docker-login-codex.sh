@@ -23,3 +23,6 @@ docker run --rm -it \
   -v "$CONFIG_PATH:/config/config.yaml:ro" \
   "$IMAGE_NAME" \
   node dist/index.js --config=/config/config.yaml --login --provider=codex --manual
+
+echo "Codex token saved in Docker volume: $DATA_VOLUME"
+echo "If the running auth2api server did not reload automatically, restart it with: docker restart auth2api"
